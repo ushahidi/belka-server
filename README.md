@@ -8,8 +8,8 @@ These services come specially handy when developing Vagrant boxes, docker images
 
 ## Currently supported
 
-* Apt repositories ( with [apt-cacher-ng](https://www.unix-ag.uni-kl.de/~bloch/acng/) )
-* Pypi packages ( with [devpi](http://doc.devpi.net/latest/) )
+* Apt repositories (with [apt-cacher-ng](https://www.unix-ag.uni-kl.de/~bloch/acng/) listening on port 3142)
+* Pypi packages (with [devpi-server](http://doc.devpi.net/latest/) listening on port 4040)
 
 ## Dependencies
 
