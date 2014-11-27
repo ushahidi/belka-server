@@ -1,15 +1,21 @@
 {
     "images": {
-        "belka-server/apt-cacher-ng": "./docker/apt-cacher-ng"
+        "belka/apt-cacher-ng": "./docker/apt-cacher-ng",
+        "belka/devpi-server": "./docker/devpi-server"
     },
     "containers": {
         "apt-cacher-ng": {
-            "image":    "belka-server/apt-cacher-ng",
+            "image":    "belka/apt-cacher-ng",
             "port":     ["3142:3142"],
-            "mount":    ["/mnt/store/cacher/apt-cacher-ng:/var/cache/apt-cacher-ng"]
+            "mount":    ["/mnt/store/belka/apt-cacher-ng:/var/cache/apt-cacher-ng"]
+        },
+        "devpi-server": {
+            "image":    "belka/devpi-server",
+            "port":     ["4040:4040"],
+            "mount":    ["/mnt/store/belka/devpi-server:/mnt/devpi"]
         }
     },
     "clusters": {
-        "belka": ["apt-cacher-ng"]
+        "belka": ["apt-cacher-ng", "devpi-server"]
     }
 }

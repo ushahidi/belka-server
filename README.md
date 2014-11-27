@@ -9,6 +9,7 @@ These services come specially handy when developing Vagrant boxes, docker images
 ## Currently supported
 
 * Apt repositories ( with [apt-cacher-ng](https://www.unix-ag.uni-kl.de/~bloch/acng/) )
+* Pypi packages ( with [devpi](http://doc.devpi.net/latest/) )
 
 ## Dependencies
 
