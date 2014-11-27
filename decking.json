@@ -1,0 +1,15 @@
+{
+    "images": {
+        "belka-server/apt-cacher-ng": "./docker/apt-cacher-ng"
+    },
+    "containers": {
+        "apt-cacher-ng": {
+            "image":    "belka-server/apt-cacher-ng",
+            "port":     ["3142:3142"],
+            "mount":    ["/mnt/store/cacher/apt-cacher-ng:/var/cache/apt-cacher-ng"]
+        }
+    },
+    "clusters": {
+        "belka": ["apt-cacher-ng"]
+    }
+}
