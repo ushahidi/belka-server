@@ -1,7 +1,8 @@
 {
     "images": {
         "belka/apt-cacher-ng": "./docker/apt-cacher-ng",
-        "belka/devpi-server": "./docker/devpi-server"
+        "belka/devpi-server": "./docker/devpi-server",
+        "belka/gitpod": "./docker/gitpod"
     },
     "containers": {
         "apt-cacher-ng": {
@@ -13,9 +14,14 @@
             "image":    "belka/devpi-server",
             "port":     ["4040:4040"],
             "mount":    ["/mnt/store/belka/devpi-server:/mnt/devpi"]
+        },
+        "gitpod": {
+            "image":    "belka/gitpod",
+            "port":     ["2200:2200"],
+            "mount":    ["/mnt/store/belka/gitpod:/home/git"]
         }
     },
     "clusters": {
-        "belka": ["apt-cacher-ng", "devpi-server"]
+        "belka": ["apt-cacher-ng", "devpi-server", "gitpod"]
     }
 }

@@ -1,0 +1,196 @@
+#!/usr/bin/perl
+use strict;
+#use warnings;
+
+use File::Temp qw(tempfile);
+
+# can something be quick and dirty, but also secure?
+
+# this covers all types of invocations
+shift if ( $ARGV[0] || '' ) eq '-c';
+my $cmd = '';
+$cmd ||= $ENV{SSH_ORIGINAL_COMMAND};
+$cmd ||= ( join( " ", @ARGV ) );
+
+# no buffering
+select(STDERR); $|++; select(STDOUT); $|++;
+
+# safety first
+die "need a command\n" unless $cmd;
+die "invalid character $1 in $cmd\n"   if $cmd =~ m(([^-+=:'""'./@ \w]));
+die "I don't like .. in $cmd\n"        if $cmd =~ /\.\./;
+die "I don't like leading / in $cmd\n" if $cmd =~ m((^|\s)/);
+
+# 5 basic commands
+if ( $cmd eq 'info' ) {
+    list_repos();
+} elsif ( $cmd =~ /^clone (\S+) (\S+) ?(\S+)?$/ ) {
+    clone( $1, $2, $3 );
+} elsif ( $cmd =~ /^lazy-fetch (\S+)$/ ) {
+    fetch($1) unless lazy($1);
+} elsif ( $cmd =~ /^fetch (\S+)$/ ) {
+    fetch($1);
+} elsif ( $cmd =~ /^git-upload-pack (.+)$/ ) {
+    upload($1);
+} else {
+    die "unknown command $cmd\n";
+}
+
+sub setup_git_ssh {
+    my ( $keyname ) = @_;
+    my $keyfile = "$ENV{HOME}/.keys/id_${keyname}";
+    if (! -r $keyfile) {
+        print STDERR "key $keyname not found";
+        exit 1;
+    }
+
+    # handle and filename
+    my ($fh, $wrapfile) = tempfile( );
+    print $fh <<"EOH";
+#!/bin/bash
+/usr/bin/ssh -i ${keyfile} \$*
+EOH
+    close($fh);
+
+    system("chmod +x $wrapfile");
+    $ENV{GIT_SSH} = $wrapfile;
+}
+
+sub read_cfg {
+    my ( $reponame ) = @_;
+    my $repo_cfg_file = "./.${reponame}.cfg";
+
+    our $err;
+
+    {
+        package CFG;
+
+        # Clean previously defined values
+        foreach my $entry ( keys %CFG:: ) {
+            undef $CFG::{$entry};
+        }
+
+        my $rc = do($repo_cfg_file);
+        # Check for errors
+        if ($@) {
+            $::err = "ERROR: Failure compiling '$repo_cfg_file' - $@";
+        } elsif (! defined($rc)) {
+            $::err = "ERROR: Failure reading '$repo_cfg_file' - $!";
+        } elsif (! $rc) {
+            $::err = "ERROR: Failure processing '$repo_cfg_file'";
+        }
+    }
+    if ($err) {
+        print(STDERR $err, "\n");
+        exit(1);
+    }
+}
+
+sub write_cfg {
+    my ( $reponame, $_cfg ) = @_;
+    my $repo_cfg_file = "./.${reponame}.cfg";
+    open(my $cfgh, ">", $repo_cfg_file) or die "cannot open file: $!";
+    while (my ($k, $v) = each %{$_cfg}) {
+        print($cfgh "\$$k=\"$v\";\n");
+    }
+    close($cfgh);
+}
+
+sub exists_cfg {
+    my ( $reponame ) = @_;
+    return ( -r "./.${reponame}.cfg" );
+}
+
+# ----------------------------------------------------------------------
+
+sub list_repos {
+    print "hello, this is gitpod\n\n";
+    #system('find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort');
+    open(my $repos, "find . -type d -name '?*.git' | cut -c3- | sed -e 's/\\.git\$//' | sort |");
+    while (<$repos>) {
+        chop($_);
+        my $repo = $_;
+        read_cfg($repo);
+        print STDERR "* ${repo} (${CFG::remote})";
+        if (defined($CFG::keyname)) {
+            print STDERR " [keyname=${CFG::keyname}]";
+        }
+        print STDERR "\n";
+    }
+    close($repos);
+}
+
+sub lazy {
+    my $repo = shift;
+    $repo =~ s/\.git$//;
+
+    # call the external script 'lazy'.  If it succeeds we return true.  Note
+    # that shell and perl have opposite meanings for 0/non-0.
+    system("$ENV{HOME}/bin/lazy '$repo'") or return 1;
+    return 0;
+}
+
+sub fetch {
+    my $repo = shift;
+    $repo =~ s/\.git$//;
+    my $reponame = $repo;
+    ($reponame) = $repo =~ /^\/(.*)$/ if $repo =~ /^\/(.*)$/;
+
+    -d "$ENV{HOME}/$repo.git" or die "invalid repo $repo\n";
+    print STDERR "fetching from " . `git config --file $ENV{HOME}/$repo.git/config --get remote.origin.url`;
+
+    read_cfg($reponame);
+    if (defined($CFG::keyname)) {
+        setup_git_ssh($CFG::keyname);
+    }
+
+    system("cd $ENV{HOME}/$repo.git; git fetch --progress") and die "FATAL: git fetch failed; check messages above\n";
+}
+
+sub upload {
+    my $repo = shift;
+    $repo =~ s/(^')|('$)//g;
+    my $reponame = $repo;
+    ($reponame) = $repo =~ /^\/(.*)$/ if $repo =~ /^\/(.*)$/;
+
+    fetch($repo) unless lazy($repo);
+
+    exec( "git", "shell", "-c", "git-upload-pack '$reponame'" );
+    # XXX this is weird.  gl-auth-command does not require those single
+    # quotes but this one does.  Without them, you get "fatal: bad
+    # argument" followed by "...remote hung up..."
+}
+
+sub clone {
+    my ( $remote, $local, $keyname ) = @_;
+
+    my %cfg_hash = ( 'remote' => $remote );
+
+    exists_cfg($local) and die "config for $local already exists";
+
+    if ($remote !~ /^http.*$/) {
+        # Add the remote host SSH key if not present in the known_hosts file
+        my ($remote_user, $remote_host, $remote_repo) = ("","","");
+        ($remote_user, $remote_host, $remote_repo) = ($remote =~ /^(\w+)@([\w.]+):(.*)$/);
+        if ($remote_host ne "") {
+          if (system("grep -q $remote_host .ssh/known_hosts")) {
+            system("bash -c 'ssh-keyscan -t rsa $remote_host >> .ssh/known_hosts'");
+          }
+        }
+    }
+
+    # If a key is specified
+    if (defined($keyname)) {
+        # Set up ssh wrapper using the key
+        $cfg_hash{keyname} = $keyname;
+        setup_git_ssh($keyname);
+    }
+
+    write_cfg($local, \%cfg_hash);
+
+    # Perform the clone
+    $local =~ s/\.git$//;
+    my $cmd = "git clone --progress --mirror $remote $local.git";
+    print STDERR "running: $cmd\n";
+    system($cmd) and die "FATAL: git clone failed; check messages above\n";
+}

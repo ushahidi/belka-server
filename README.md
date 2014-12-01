@@ -10,6 +10,7 @@ These services come specially handy when developing Vagrant boxes, docker images
 
 * Apt repositories (with [apt-cacher-ng](https://www.unix-ag.uni-kl.de/~bloch/acng/) listening on port 3142)
 * Pypi packages (with [devpi-server](http://doc.devpi.net/latest/) listening on port 4040)
+* Git repos (based on [gitpod](https://github.com/sitaramc/gitpod) listening on port 2200)
 
 ## Dependencies
 
